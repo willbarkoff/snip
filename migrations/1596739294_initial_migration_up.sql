@@ -1,12 +1,5 @@
--- -------------------------------------------------------------
--- TablePlus 3.7.1(332)
---
--- https://tableplus.com/
---
--- Database: snip
--- Generation Time: 2020-08-06 01:08:34.7090
--- -------------------------------------------------------------
-
+-- Description: initial migration
+-- Up migration
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -18,7 +11,6 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 
-DROP TABLE IF EXISTS `links`;
 CREATE TABLE `links` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `short` varchar(32) DEFAULT NULL,
@@ -29,7 +21,6 @@ CREATE TABLE `links` (
   UNIQUE KEY `id` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `username` varchar(32) DEFAULT NULL,
