@@ -22,18 +22,20 @@
 			<h3>Shorten a URL</h3>
 			<form class="form-inline" action="/new" method="POST">
 				<label class="sr-only" for="keyInput">Key</label>
-				<input type="text" class="form-control mb-2 mr-sm-2" id="keyInput" name="key" placeholder="duck">
+				<input type="text" class="form-control mb-2 mr-sm-2" id="keyInput" name="key" placeholder="duck"
+					required>
 
 				<label class="sr-only" for="urlInput">url</label>
 				<input type="text" class="form-control mb-2 mr-sm-2" id="urlInput" name="url"
-					placeholder="https://duckduckgo.com">
+					placeholder="https://duckduckgo.com" required>
 
 				<button type="submit" class="btn btn-primary mb-2">Create</button>
 			</form>
 			<h3>Manage shortened URLs</h3>
 			<ul>
 				{{range .Links}}
-				<li><a href="/{{.Key}}">{{.Key}}</a> ({{.Clicks}} clicks)</li>
+				<li><a href="/{{.Key}}">{{.Key}}</a> ({{.Clicks}} clicks) <a href="/delete/{{.Key}}"
+						class="text-danger">delete</a></li>
 				{{end}}
 			</ul>
 		</div>

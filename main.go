@@ -3,9 +3,12 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"log"
 	"net/http"
+	netUrl "net/url"
 	"regexp"
 	"runtime"
+	"strings"
 
 	"github.com/corneldamian/httpway"
 	"github.com/gorilla/mux"
@@ -13,7 +16,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var errLinkNotFound = errors.New("link not found")
 var errAlreadySetUp = errors.New("already set up")
 var errLinkExists = errors.New("short link already exists")
 var errInvalidShortLink = errors.New("short link invalid")
@@ -26,7 +28,7 @@ var server *httpway.Server
 
 var symbolsRegEx = regexp.MustCompile("[^a-zA-Z0-9]+")
 
-var invalidWords = []string{"login", "logout", "new", "setup", "preview"}
+var invalidWords = []string{"login", "logout", "new", "setup", "preview", "delete"}
 
 func main() {
 	configure()
@@ -37,7 +39,7 @@ func main() {
 	captchaClient = hcaptcha.New(config.Captcha.HCaptchaSecretKey)
 
 	captchaClient.FailureHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeError(w, errCaptchaFailed)
+		writeError(w, errCaptchaFailed, http.StatusTooManyRequests)
 	})
 
 	r := mux.NewRouter()
@@ -49,9 +51,11 @@ func main() {
 	r.HandleFunc("/setup", setup).Methods("GET")
 	r.Handle("/setup", captchaClient.Handler(http.HandlerFunc(submitSetup))).Methods("POST")
 	r.HandleFunc("/preview/{key}", preview).Methods("GET")
+	r.HandleFunc("/delete/{key}", confirmDelete).Methods("GET")
+	r.HandleFunc("/delete/{key}", delete)
 	r.HandleFunc("/{key}", link).Methods("GET")
 
-	http.ListenAndServe(config.Server.Address, r)
+	log.Fatal(http.ListenAndServe(config.Server.Address, r))
 }
 
 func setup(w http.ResponseWriter, r *http.Request) {
@@ -62,14 +66,14 @@ func setup(w http.ResponseWriter, r *http.Request) {
 
 func submitSetup(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("username") == "" || r.FormValue("password") == "" {
-		writeError(w, errInvalidParams)
+		writeError(w, errInvalidParams, http.StatusBadRequest)
 		return
 	}
 
 	_, ok := hcaptcha.Get(r)
 
 	if !ok {
-		writeError(w, errCaptchaFailed)
+		writeError(w, errCaptchaFailed, http.StatusTooManyRequests)
 		return
 	}
 
@@ -77,44 +81,44 @@ func submitSetup(w http.ResponseWriter, r *http.Request) {
 
 	err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&userCount)
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	if userCount != 0 {
-		writeError(w, errAlreadySetUp)
+		writeError(w, errAlreadySetUp, http.StatusBadRequest)
 		return
 	}
 
 	hashedPw, err := bcrypt.GenerateFromPassword([]byte(r.FormValue("password")), bcrypt.DefaultCost)
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	_, err = db.Exec("INSERT INTO users (username, password) VALUES (?, ?)", r.FormValue("username"), string(hashedPw))
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	userID := 0
 	err = db.QueryRow("SELECT id FROM users WHERE username = ?", r.FormValue("username")).Scan(&userID)
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	session, err := store.Get(r, "session")
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	session.Values["userID"] = userID
 	err = session.Save(r, w)
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
@@ -125,13 +129,13 @@ func submitSetup(w http.ResponseWriter, r *http.Request) {
 func index(w http.ResponseWriter, r *http.Request) {
 	session, err := store.Get(r, "session")
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 	if session.Values["userID"] != 0 {
 		rows, err := db.Query("SELECT id, short, url, clicks FROM links WHERE ownerId = ? ORDER BY id DESC", session.Values["userID"])
 		if err != nil {
-			writeError(w, err)
+			writeError(w, err, http.StatusInternalServerError)
 			return
 		}
 		defer rows.Close()
@@ -153,14 +157,14 @@ func index(w http.ResponseWriter, r *http.Request) {
 
 func login(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("username") == "" || r.FormValue("password") == "" {
-		writeError(w, errInvalidParams)
+		writeError(w, errInvalidParams, http.StatusInternalServerError)
 		return
 	}
 
 	_, ok := hcaptcha.Get(r)
 
 	if !ok {
-		writeError(w, errCaptchaFailed)
+		writeError(w, errCaptchaFailed, http.StatusTooManyRequests)
 		return
 	}
 
@@ -176,7 +180,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	} else if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
@@ -192,14 +196,14 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	session, err := store.Get(r, "session")
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	session.Values["userID"] = id
 	err = session.Save(r, w)
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
@@ -210,14 +214,14 @@ func login(w http.ResponseWriter, r *http.Request) {
 func logout(w http.ResponseWriter, r *http.Request) {
 	session, err := store.Get(r, "session")
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	session.Values["userID"] = 0
 	err = session.Save(r, w)
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
@@ -227,42 +231,48 @@ func logout(w http.ResponseWriter, r *http.Request) {
 func create(w http.ResponseWriter, r *http.Request) {
 	session, err := store.Get(r, "session")
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	if session.Values["userId"] == 0 {
-		writeError(w, errUnauthorized)
+		writeError(w, errUnauthorized, http.StatusUnauthorized)
 		return
 	}
 
 	if r.FormValue("key") == "" || r.FormValue("url") == "" {
-		writeError(w, errInvalidParams)
+		writeError(w, errInvalidParams, http.StatusBadRequest)
 		return
 	}
 
-	normalizedKey := symbolsRegEx.ReplaceAllString(r.FormValue("key"), "")
+	normalizedKey := strings.ToLower(symbolsRegEx.ReplaceAllString(r.FormValue("key"), ""))
+
+	_, err = netUrl.ParseRequestURI(r.FormValue("url"))
+	if err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	if contains(invalidWords, normalizedKey) {
+		writeError(w, errInvalidShortLink, http.StatusBadRequest)
+		return
+	}
 
 	id := 0
 
 	found := db.QueryRow("SELECT id FROM links WHERE short = ?", normalizedKey).Scan(&id)
 
 	if found == nil {
-		writeError(w, errLinkExists)
+		writeError(w, errLinkExists, http.StatusBadRequest)
 		return
 	} else if found != sql.ErrNoRows {
-		writeError(w, found)
-		return
-	}
-
-	if contains(invalidWords, normalizedKey) {
-		writeError(w, errInvalidShortLink)
+		writeError(w, found, http.StatusBadRequest)
 		return
 	}
 
 	_, err = db.Exec("INSERT INTO links (short, url, ownerId, clicks) VALUES (?, ?, ?, ?)", normalizedKey, r.FormValue("url"), session.Values["userID"], 0)
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
@@ -271,7 +281,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 
 func link(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	key := vars["key"]
+	key := strings.ToLower(vars["key"])
 
 	url := ""
 	clicks := 0
@@ -279,10 +289,11 @@ func link(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow("SELECT url, clicks FROM links WHERE short = ?", key).Scan(&url, &clicks)
 
 	if err == sql.ErrNoRows {
-		writeError(w, errLinkNotFound)
+		w.WriteHeader(http.StatusNotFound)
+		templates["notfound"].Execute(w, nil)
 		return
 	} else if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
@@ -290,7 +301,7 @@ func link(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec("UPDATE links SET clicks = ? WHERE short = ?", clicks, key)
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
@@ -299,7 +310,7 @@ func link(w http.ResponseWriter, r *http.Request) {
 
 func preview(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	key := vars["key"]
+	key := strings.ToLower(vars["key"])
 
 	url := ""
 	clicks := 0
@@ -307,10 +318,11 @@ func preview(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow("SELECT url, clicks FROM links WHERE short = ?", key).Scan(&url, &clicks)
 
 	if err == sql.ErrNoRows {
-		writeError(w, errLinkNotFound)
+		w.WriteHeader(http.StatusNotFound)
+		templates["notfound"].Execute(w, nil)
 		return
 	} else if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 
@@ -318,7 +330,7 @@ func preview(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec("UPDATE links SET clicks = ? WHERE short = ?", clicks, key)
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
 	templates["preview"].Execute(w, previewPageData{
@@ -327,8 +339,50 @@ func preview(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func writeError(w http.ResponseWriter, err error) {
-	w.WriteHeader(http.StatusInternalServerError)
+func delete(w http.ResponseWriter, r *http.Request) {
+	session, err := store.Get(r, "session")
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	if session.Values["userID"] == 0 {
+		writeError(w, errUnauthorized, http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	key := vars["key"]
+
+	_, err = db.Exec("DELETE FROM links WHERE short = ?", key)
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func confirmDelete(w http.ResponseWriter, r *http.Request) {
+	session, err := store.Get(r, "session")
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	if session.Values["userID"] == 0 {
+		writeError(w, errUnauthorized, http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	key := vars["key"]
+
+	templates["delete"].Execute(w, deleteData{key})
+}
+
+func writeError(w http.ResponseWriter, err error, status int) {
+	w.WriteHeader(status)
 
 	errorData := errorPageData{}
 
