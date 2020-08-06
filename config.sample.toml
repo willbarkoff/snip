@@ -1,0 +1,12 @@
+[Database]
+Username = "snip"
+Password = "snip"
+Database = "snip"
+
+[Server]
+Address = ":80"
+
+[Captcha]
+# a free HCaptcha account can be made at https://www.hcaptcha.com/.
+HCaptchaSiteKey = "site key"
+HCaptchaSecretKey = "super secret"

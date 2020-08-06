@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" class="h-100">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.1/css/bootstrap.min.css"
+		integrity="sha384-VCmXjywReHh4PwowAiWNagnWcLhlEJLA5buUprzK8rxFgeH0kww/aWY76TfkUoSX" crossorigin="anonymous">
+	<title>Snip</title>
+</head>
+
+<body class="d-flex flex-column h-100">
+	<!-- Begin page content -->
+	<main role="main" class="flex-shrink-0">
+		<div class="container">
+			<h1 class="mt-5">Snip URL Shortener
+				<form action="/logout" method="POST">
+					<button type="submit" class="btn btn-danger mb-2">Logout</button>
+				</form>
+			</h1>
+			<p class="lead">Manage your shortened urls</p>
+			<h3>Shorten a URL</h3>
+			<form class="form-inline" action="/new" method="POST">
+				<label class="sr-only" for="keyInput">Key</label>
+				<input type="text" class="form-control mb-2 mr-sm-2" id="keyInput" name="key" placeholder="duck">
+
+				<label class="sr-only" for="urlInput">url</label>
+				<input type="text" class="form-control mb-2 mr-sm-2" id="urlInput" name="url"
+					placeholder="https://duckduckgo.com">
+
+				<button type="submit" class="btn btn-primary mb-2">Create</button>
+			</form>
+			<h3>Manage shortened URLs</h3>
+			<ul>
+				{{range .Links}}
+				<li><a href="/{{.Key}}">{{.Key}}</a> ({{.Clicks}} clicks)</li>
+				{{end}}
+			</ul>
+		</div>
+	</main>
+
+	<footer class="footer mt-auto py-3">
+		<div class="container">
+			<span class="text-muted">Made by <a href="https://willbarkoff.dev">Will Barkoff</a> in New York City</span>
+		</div>
+	</footer>
+</body>
+
+</html>

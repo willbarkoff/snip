@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en" class="h-100">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.1/css/bootstrap.min.css"
+		integrity="sha384-VCmXjywReHh4PwowAiWNagnWcLhlEJLA5buUprzK8rxFgeH0kww/aWY76TfkUoSX" crossorigin="anonymous">
+	<script src="https://hcaptcha.com/1/api.js" async defer></script>
+	<title>Snip | Setup</title>
+</head>
+
+<body class="d-flex flex-column h-100">
+	<!-- Begin page content -->
+	<main role="main" class="flex-shrink-0">
+		<div class="container">
+			<h1 class="mt-5">Setup</h1>
+			<p class="lead">This page is used to set up snip.</p>
+			<p>If snip already has a user, this won't work.</p>
+			<form action="/setup" method="POST">
+				<div class="form-group">
+					<label for="usernameInput">Username</label>
+					<input type="text" class="form-control" id="usernameInput" name="username">
+				</div>
+				<div class="form-group">
+					<label for="passwordInput">Password</label>
+					<input type="password" class="form-control" id="passwordInput" name="password">
+					<small id="emailHelp" class="form-text text-muted">Passwords are hashed and salted using the bcrypt
+						algorithm.</small>
+					<div class="h-captcha" data-sitekey="{{.HCaptchaSiteKey}}"></div>
+				</div>
+				<button type="submit" class="btn btn-primary mb-2">Submit</button>
+			</form>
+		</div>
+	</main>
+
+	<footer class="footer mt-auto py-3">
+		<div class="container">
+			<span class="text-muted">Made by <a href="https://willbarkoff.dev">Will Barkoff</a> in New York City</span>
+		</div>
+	</footer>
+</body>
+
+</html>
