@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	netUrl "net/url"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/corneldamian/httpway"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
 	"github.com/kataras/hcaptcha"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -126,13 +128,20 @@ func submitSetup(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func isLoggedIn(session *sessions.Session) bool {
+	return session.Values["userID"] != nil && session.Values["userID"] != 0
+}
+
 func index(w http.ResponseWriter, r *http.Request) {
 	session, err := store.Get(r, "session")
 	if err != nil {
 		writeError(w, err, http.StatusInternalServerError)
 		return
 	}
-	if session.Values["userID"] != 0 {
+
+	fmt.Println(session.Values["userID"])
+
+	if isLoggedIn(session) {
 		rows, err := db.Query("SELECT id, short, url, clicks FROM links WHERE ownerId = ? ORDER BY id DESC", session.Values["userID"])
 		if err != nil {
 			writeError(w, err, http.StatusInternalServerError)
@@ -235,7 +244,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if session.Values["userId"] == 0 {
+	if !isLoggedIn(session) {
 		writeError(w, errUnauthorized, http.StatusUnauthorized)
 		return
 	}
@@ -346,7 +355,7 @@ func delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if session.Values["userID"] == 0 {
+	if !isLoggedIn(session) {
 		writeError(w, errUnauthorized, http.StatusUnauthorized)
 		return
 	}
@@ -370,7 +379,7 @@ func confirmDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if session.Values["userID"] == 0 {
+	if !isLoggedIn(session) {
 		writeError(w, errUnauthorized, http.StatusUnauthorized)
 		return
 	}
